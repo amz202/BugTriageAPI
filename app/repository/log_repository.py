@@ -1,34 +1,39 @@
-from app.database.client import supabase_client
+from app.database.client import db_state
 
 
 class LogRepository:
 
-    TABLE_NAME = "prediction_logs"
-
     @staticmethod
-    def insert_prediction(
+    async def insert_prediction(
             issue_title: str,
             description: str,
             predicted_component: str,
             confidence_score: float,
             execution_time_ms: float
-    ) -> dict:
+    ) -> str:
         """
         Persists the input payload and inference results to db
         """
-        payload = {
-            "issue_title": issue_title,
-            "description": description,
-            "predicted_component": predicted_component,
-            "confidence_score": confidence_score,
-            "execution_time_ms": execution_time_ms
-        }
+
+        query = """
+                INSERT INTO prediction_logs
+                (issue_title, description, predicted_component, confidence_score, execution_time_ms)
+                VALUES ($1, $2, $3, $4, $5) RETURNING id; \
+                """
+
+        if db_state.pool is None:
+            raise RuntimeError("Database pool is not initialized.")
 
         try:
-            response = supabase_client.table(LogRepository.TABLE_NAME).insert(payload).execute()
-            if not response.data:
-                raise RuntimeError("Supabase insertion returned empty data.")
-            return response.data[0]
+            async with db_state.pool.acquire() as connection:
+                log_id = await connection.fetchval(
+                    query,
+                    issue_title,
+                    description,
+                    predicted_component,
+                    confidence_score,
+                    execution_time_ms
+                )
+            return str(log_id)
         except Exception as e:
-            # might log this error but allow the API response to proceed
             raise RuntimeError(f"Database insertion failed: {e}")

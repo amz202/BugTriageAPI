@@ -2,12 +2,9 @@ import os
 from pydantic import BaseModel
 
 class Settings(BaseModel):
-    SUPABASE_URL: str = os.getenv("SUPABASE_URL", "")
-    SUPABASE_KEY: str = os.getenv("SUPABASE_KEY", "")
-
-    def validate_supabase_config(self):
-        """Validates credentials."""
-        if not self.SUPABASE_URL or not self.SUPABASE_KEY:
-            raise ValueError("environment variables must be set.")
+    DATABASE_URL: str = os.getenv(
+        "DATABASE_URL",
+        "postgresql://bug_user:admin@127.0.0.1:5432/bugtriage"
+    )
 
 settings = Settings()
