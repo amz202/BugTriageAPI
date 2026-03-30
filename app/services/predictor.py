@@ -1,6 +1,6 @@
 import os
 import joblib
-from preprocessor import TextPreprocessor
+from app.services.preprocessor import TextPreprocessor
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ARTIFACTS_DIR = os.path.join(BASE_DIR, "artifacts")
@@ -21,9 +21,9 @@ class BugReportPredictor:
             return
 
         try:
-            self.model = joblib.load(os.path.join(ARTIFACTS_DIR, "model.joblib"))
-            self.vectorizer = joblib.load(os.path.join(ARTIFACTS_DIR, "vectorizer.joblib"))
-            self.label_encoder = joblib.load(os.path.join(ARTIFACTS_DIR, "label_encoder.joblib"))
+            self.model = joblib.load(os.path.join(ARTIFACTS_DIR, "model.pkl"))
+            self.vectorizer = joblib.load(os.path.join(ARTIFACTS_DIR, "vectorizer.pkl"))
+            self.label_encoder = joblib.load(os.path.join(ARTIFACTS_DIR, "label_encoder.pkl"))
             self.is_loaded = True
         except Exception as e:
             raise RuntimeError(f"Artifact deserialization failed: {e}")
