@@ -1,34 +1,31 @@
-import asyncpg
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routers import inference
-from app.services.predictor import predictor_service
+from app.services.predictor import predictor
 from app.core.middleware import TimingMiddleware
 from app.core.exceptions import validation_exception_handler, global_exception_handler
-from app.database.client import db_state
-from app.core.config import settings
+from app.database.client import engine
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    db_state.pool = await asyncpg.create_pool(dsn=settings.DATABASE_URL)
-    predictor_service.load_artifacts()
+    # Initialize ONNX runtime and Tokenizer
+    predictor._initialize()
     yield
-    await db_state.pool.close()
+    # Safely dispose of the SQLAlchemy engine pool on shutdown
+    await engine.dispose()
 
 app = FastAPI(
     title="Bug Triage API",
-    description="Inference service for Chromium bug report classification.",
-    version="1.0.0",
+    description="Stateful routing and inference service for Chromium bug report classification.",
+    version="2.0.0",
     lifespan=lifespan
 )
 
 # Middleware
 app.add_middleware(TimingMiddleware)
-
-# CORS Middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -37,9 +34,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Exception Handlers
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
 app.add_exception_handler(Exception, global_exception_handler)
 
+# Routers
 app.include_router(inference.router)
 
 @app.get("/health", tags=["system"])
@@ -47,5 +46,5 @@ async def health_check():
     """Liveness probe for orchestration services."""
     return {
         "status": "healthy",
-        "model_loaded": predictor_service.is_loaded
+        "model_loaded": predictor.session is not None
     }

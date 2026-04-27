@@ -1,5 +1,9 @@
 from pydantic import BaseModel
 from typing import Dict, Any
+from pydantic import BaseModel, ConfigDict
+from datetime import datetime
+from typing import Optional, Dict, Any
+import uuid
 
 class PredictionResponse(BaseModel):
     """
@@ -23,3 +27,39 @@ class PredictionResponse(BaseModel):
                 }
             }
         }
+
+
+class TicketResponse(BaseModel):
+    id: uuid.UUID
+    title: str
+    description: str
+    reported_time: datetime
+    created_at: datetime
+    status: str
+
+    # Machine Learning Outputs
+    predicted_component: Optional[str] = None
+    confidence_score: Optional[float] = None
+    priority: Optional[str] = None
+    resolution_time_days: Optional[float] = None
+    attention_weights: Optional[Dict[str, Any]] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TicketResponse(BaseModel):
+    id: uuid.UUID
+    title: str
+    description: str
+    reported_time: datetime
+    created_at: datetime
+    status: str
+
+    # Machine Learning Outputs
+    predicted_component: Optional[str] = None
+    confidence_score: Optional[float] = None
+    priority: Optional[str] = None
+    resolution_time_days: Optional[float] = None
+    attention_weights: Optional[Dict[str, Any]] = None
+
+    model_config = ConfigDict(from_attributes=True)

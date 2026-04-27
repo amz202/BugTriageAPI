@@ -159,3 +159,40 @@ cython_debug/
 #  and can be added to the global gitignore or merged into this file.  For a more nuclear
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
+
+# --- Python / Environment ---
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+.env
+.pytest_cache/
+
+# --- ML Artifacts (Large Files) ---
+# We keep the folder but ignore the binary data files
+# If you use Git LFS, you can remove these, but usually, we ignore .data files
+app/artifacts/*.onnx.data
+app/artifacts/*.onnx
+# Ignore Hugging Face cache if it downloads to your project root
+.cache/
+
+# --- Database / Migrations ---
+# We keep the migration scripts, but ignore local sqlite or logs
+*.db
+*.sqlite3
+# If you have local postgres logs or exports
+*.sql
+*.log
+
+# --- OS / Editor ---
+.DS_Store
+.vscode/
+.idea/
+.fseventsd
+*.swp
+
+# --- Node / Frontend (If you have it in the same repo) ---
+node_modules/
+dist/
+build/
+.eslintcache
