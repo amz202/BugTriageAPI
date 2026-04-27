@@ -42,12 +42,13 @@ class User(Base):
     __tablename__ = "users"
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    email: Mapped[str] = mapped_column(String(255), unique=True)
+    email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    hashed_password: Mapped[str] = mapped_column(String(255)) # Added for Phase 1 Auth
     team_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("teams.id"))
 
     team: Mapped[Optional["Team"]] = relationship(back_populates="users")
     labels: Mapped[List["Label"]] = relationship(secondary="user_labels", back_populates="users")
-
+    comments: Mapped[List["Comment"]] = relationship(back_populates="author")
 
 class Ticket(Base):
     __tablename__ = "tickets"
@@ -66,10 +67,10 @@ class Ticket(Base):
     attention_weights: Mapped[Optional[dict]] = mapped_column(JSON)
 
     # Lifecycle
-    status: Mapped[str] = mapped_column(String(20), default="pending_triage")  # pending_triage, assigned, manual_review
+    status: Mapped[str] = mapped_column(String(20), default="pending_triage")
 
     assignment: Mapped[Optional["TicketAssignment"]] = relationship(back_populates="ticket", uselist=False)
-
+    comments: Mapped[List["Comment"]] = relationship(back_populates="ticket", cascade="all, delete-orphan")
 
 class TicketAssignment(Base):
     __tablename__ = "ticket_assignments"
@@ -81,3 +82,15 @@ class TicketAssignment(Base):
     assigned_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
     ticket: Mapped["Ticket"] = relationship(back_populates="assignment")
+
+class Comment(Base):
+    __tablename__ = "comments"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    ticket_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tickets.id"))
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
+    text: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    ticket: Mapped["Ticket"] = relationship(back_populates="comments")
+    author: Mapped["User"] = relationship(back_populates="comments")

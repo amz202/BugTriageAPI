@@ -2,8 +2,6 @@ import uuid
 import logging
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-
-# Assume a database dependency exists in app.database.client
 from app.database.client import get_db
 from app.database.model import Ticket, TicketAssignment
 from app.schemas.request import TicketCreate
