@@ -1,14 +1,25 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+
+from app.core.dependencies import get_current_user
 from app.database.client import get_db
 from app.database.model import Ticket, User, Label, TicketAssignment
 from app.schemas.ticket import TicketCreate, TicketDetailResponse
+from fastapi import HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+from typing import List
+import uuid
 
-# from app.services.predictor import predict_bug_attributes  # Existing ML pipeline
+from app.database.model import Ticket, TicketAssignment
+from app.schemas.ticket import TicketListResponse, TicketDetailResponse, TicketUpdate
 
-router = APIRouter(prefix="/api/v1/tickets", tags=["Tickets"])
-
+router = APIRouter(
+    prefix="/api/v1/tickets",
+    tags=["Tickets"],
+    dependencies=[Depends(get_current_user)]
+)
 
 @router.post("", response_model=TicketDetailResponse)
 async def ingest_ticket(ticket_in: TicketCreate, db: AsyncSession = Depends(get_db)):
@@ -51,3 +62,80 @@ async def ingest_ticket(ticket_in: TicketCreate, db: AsyncSession = Depends(get_
     await db.refresh(new_ticket)
 
     return new_ticket
+
+
+@router.get("", response_model=List[TicketListResponse])
+async def list_tickets(
+        skip: int = 0,
+        limit: int = 20,
+        db: AsyncSession = Depends(get_db)
+):
+    """
+    Retrieves a paginated list of tickets.
+    Uses the TicketListResponse schema to automatically exclude heavy ML JSON payloads.
+    """
+    stmt = select(Ticket).order_by(Ticket.created_at.desc()).offset(skip).limit(limit)
+    result = await db.execute(stmt)
+    return result.scalars().all()
+
+
+@router.get("/{ticket_id}", response_model=TicketDetailResponse)
+async def get_ticket(ticket_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    """
+    Retrieves the full detail view of a specific ticket, including attention_weights.
+    """
+    result = await db.execute(select(Ticket).where(Ticket.id == ticket_id))
+    ticket = result.scalars().first()
+
+    if not ticket:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Ticket not found"
+        )
+    return ticket
+
+
+@router.patch("/{ticket_id}", response_model=TicketDetailResponse)
+async def update_ticket(
+        ticket_id: uuid.UUID,
+        update_data: TicketUpdate,
+        db: AsyncSession = Depends(get_db)
+):
+    """
+    Allows manual triage overrides for status and assignment.
+    """
+    result = await db.execute(select(Ticket).where(Ticket.id == ticket_id))
+    ticket = result.scalars().first()
+
+    if not ticket:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Ticket not found"
+        )
+
+    if update_data.status:
+        ticket.status = update_data.status
+
+    if update_data.assigned_to_user_id:
+        # Check for existing assignment
+        assign_result = await db.execute(
+            select(TicketAssignment).where(TicketAssignment.ticket_id == ticket_id)
+        )
+        assignment = assign_result.scalars().first()
+
+        if assignment:
+            assignment.assigned_to_user_id = update_data.assigned_to_user_id
+        else:
+            # Create manual assignment if none exists
+            new_assignment = TicketAssignment(
+                ticket_id=ticket_id,
+                assigned_to_user_id=update_data.assigned_to_user_id,
+                assigned_label_name="manual_override"
+            )
+            db.add(new_assignment)
+
+        ticket.status = "assigned"
+
+    await db.commit()
+    await db.refresh(ticket)
+    return ticket

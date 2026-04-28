@@ -1,104 +1,103 @@
+# BugTriageAPI
 
-# Bug Triage Machine Learning API
+An issue tracking backend powered by asynchronous Python and a multi-task deep learning pipeline. BugTriageAPI automates the ingestion, classification, and routing of system bug reports to appropriately skilled engineering teams.
 
-A high-throughput, asynchronous RESTful API that automatically classifies software bug reports into their respective architectural components using a pre trained machine learning model. Built with FastAPI and PostgreSQL, this system is optimized for low latency inference and non blocking database telemetry.
+## System Overview
 
-## Features
-* **Stateless Machine Learning:** Artifacts (`.pkl` files) are loaded into memory exactly once during the server lifespan, preventing I/O bottlenecks and memory leaks.
-* **Asynchronous Telemetry:** Utilizes connection pooling via `asyncpg` to log inference metrics to a local PostgreSQL database without blocking the API event loop.
-* **Robust Data Validation:** Enforces strict payload contracts using Pydantic to protect the inference engine from malformed requests.
-* **Load Tested:** Handle concurrent traffic with sub-10ms latency using Locust.
+Incoming bug reports are processed through a customized CodeBERT model. The system infers the affected technical component, urgency level, and estimated resolution time. Based on the model's confidence threshold, the API dynamically routes the ticket to a verified developer possessing the corresponding expertise label, or flags it for manual human triage.
 
-## Prerequisites
-* Python 3.14+
-* PostgreSQL 14+
+## Deep Learning Pipeline
 
-## Installation & Setup
+The machine learning infrastructure is designed for asynchronous, non-blocking execution within the FastAPI event loop.
 
-**1. Clone and Initialize Environment**
+* **Model Architecture:** Multi-task CodeBERT.
+* **Runtime:** Thread-safe ONNX Runtime (`onnxruntime`) executing via `asyncio.to_thread` to preserve API concurrency.
+* **Inference Outputs:**
+    * **Component Prediction:** Classifies the issue into specific subsystems (e.g., `browser_core`, `network`, `ui`). Includes dynamic fallback logic to safely default unknown indices to `other`.
+    * **Priority Level:** Assesses urgency from `P0` to `P3`.
+    * **Resolution Time:** A regression output estimating the required days to fix the bug.
+    * **Attention Weights:** Extracts Byte-Pair Encoding (BPE) tokens and their corresponding attention weights to facilitate frontend explainability (e.g., UI heatmaps).
+* **Routing Logic:** Predictions with a confidence score $\ge 0.75$ trigger automatic assignment to developers matching the predicted label. Scores below this threshold assign the ticket a `manual_review` status.
+
+## Technology Stack
+
+* **Framework:** FastAPI (Python)
+* **Database:** PostgreSQL with `asyncpg`
+* **ORM & Migrations:** SQLAlchemy (Asynchronous) and Alembic
+* **Machine Learning:** Hugging Face `transformers` (Tokenizer) and `onnxruntime`
+* **Security:** Passlib (Bcrypt) and python-jose (JWT)
+* **Architecture:** Clean Architecture with strict Pydantic v2 data validation boundaries.
+
+---
+
+## Authentication Protocol
+
+The API utilizes stateless JSON Web Tokens (JWT) for Identity and Access Management. 
+* **Global Protection:** With the exception of registration and login, all endpoints require a valid JWT.
+* **Header Requirement:** Authenticated requests must include the token in the headers as: `Authorization: Bearer <your_access_token>`.
+
+---
+
+## API Endpoints Reference
+
+### 1. Authentication Identity (`/api/v1/auth`)
+* `POST /register`: Provisions a new developer account and hashes the password via bcrypt.
+    * **Payload:** `{ "email": "user@example.com", "password": "strongpassword" }`
+* `POST /login`: Authenticates credentials and issues a signed access token.
+    * **Payload:** `{ "email": "user@example.com", "password": "strongpassword" }`
+    * **Returns:** `{ "access_token": "eyJ...", "token_type": "bearer" }`
+
+### 2. Teams & Expertise (`/api/v1/teams` & `/api/v1/labels`)
+* `POST /api/v1/teams`: Provisions a new organizational team.
+* `GET /api/v1/teams`: Retrieves an array of all organizational teams.
+* `GET /api/v1/labels`: Retrieves an array of system labels (e.g., `network`, `ui`) that map directly to ML component predictions.
+* `POST /api/v1/users/{user_id}/labels`: Binds an expertise label to a developer to enable automated ML routing.
+    * **Payload:** `{ "label_id": "uuid" }`
+
+### 3. Ticket Management (`/api/v1/tickets`)
+* `POST /tickets`: Ingests a new ticket, executes CodeBERT inference, and automatically assigns it to a user possessing the matching expertise label based on the confidence threshold.
+    * **Payload:** `{ "title": "...", "description": "...", "reported_time": "optional_iso_timestamp" }`
+* `GET /tickets`: Retrieves a paginated array of tickets. Deliberately excludes heavy ML JSON payloads (attention weights) to optimize list rendering performance.
+    * **Query Params:** `?skip=0&limit=20`
+* `GET /tickets/{ticket_id}`: Retrieves full diagnostic data, including CodeBERT attention weights required for frontend visualization.
+* `PATCH /tickets/{ticket_id}`: Overrides the ML prediction for manual triage, reassignment, or status updates.
+
+### 4. Collaboration (`/api/v1/tickets`)
+* `POST /tickets/{ticket_id}/comments`: Appends a text comment to the ticket thread. The author ID is extracted securely from the Bearer token.
+    * **Payload:** `{ "text": "Investigating this stack trace now." }`
+
+### 5. Analytics (`/api/v1/analytics`)
+* `GET /analytics/overview`: Retrieves aggregated dashboard metrics including total tickets, pending triage count, average ML confidence, and average predicted resolution days.
+
+---
+
+## Setup and Installation
+
+**1. Environment Initialization**
 ```bash
-git clone https://github.com/amz202/BugTriageAPI
-cd BugTriageAPI
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
-```
-
-**2. Install Dependencies**
-```bash
 pip install -r requirements.txt
 ```
 
+**2. Artifact Placement**
+Ensure the multi-task CodeBERT artifacts are placed in the correct directory. Do not commit these binary files to version control.
+```text
+app/artifacts/codebert_multitask.onnx
+app/artifacts/codebert_multitask.onnx.data
+```
+
 **3. Database Configuration**
-Initialize your local PostgreSQL instance and create the required user and database.
+Define your asynchronous PostgreSQL connection string in your local `.env` file or environment variables:
+`DATABASE_URL=postgresql+asyncpg://user:password@localhost:5432/bugtriage`
 
+**4. Execute Migrations**
+Apply the SQLAlchemy schemas to your PostgreSQL database.
 ```bash
-sudo -u postgres psql -c "CREATE USER bug_user WITH PASSWORD 'admin';"
-sudo -u postgres psql -c "CREATE DATABASE bugtriage OWNER bug_user;"
+alembic upgrade head
 ```
 
-Connect to the new database (`psql -h 127.0.0.1 -U bug_user -d bugtriage`) and execute the schema definition:
-
-```sql
-CREATE TABLE prediction_logs (
-  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
-  issue_title text NOT NULL,
-  description text NOT NULL,
-  predicted_component text NOT NULL,
-  confidence_score double precision NOT NULL,
-  execution_time_ms double precision NOT NULL
-);
-```
-
-## Execution
-
-Start the ASGI server. The application will automatically load the machine learning artifacts and initialize the database connection pool.
-
+**5. Initialize Server**
 ```bash
-python -m uvicorn app.main:app --reload
+uvicorn app.main:app --reload
 ```
-The API documentation will be available at: `http://127.0.0.1:8000/docs`
-
-## API Reference
-
-### Predict Component
-Evaluates a bug report and returns the predicted system component.
-
-**Endpoint:** `POST /api/v1/predict`
-
-**Request Payload:**
-```json
-{
-  "issue_title": "UI freezes when clicking the submit button",
-  "description": "When navigating to the dashboard and clicking submit, the page becomes unresponsive for 5 seconds.",
-  "reported_time": "2026-03-29T10:00:00Z"
-}
-```
-
-**Response:**
-```json
-{
-  "status": "success",
-  "predicted_component": "ui",
-  "confidence_score": 0.8578,
-  "log_id": "a1b2c3d4-e5f6-7890-1234-56789abcdef0",
-  "metadata": {
-    "execution_time_ms": 2.48
-  }
-}
-```
-
-## Stress Testing
-
-This project includes a Locust configuration to verify system throughput and identify IO bottlenecks.
-
-1. Ensure the FastAPI server is running.
-2. Open a new terminal and activate the virtual environment.
-3. Execute the load generator:
-```bash
-locust -f locustfile.py
-```
-4. Navigate to `http://localhost:8089` to configure and initiate the swarm. 
-
-***
-
