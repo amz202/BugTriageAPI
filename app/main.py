@@ -2,49 +2,57 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-
-from app.api.routers import inference
-from app.services.predictor import predictor
 from app.core.middleware import TimingMiddleware
 from app.core.exceptions import validation_exception_handler, global_exception_handler
 from app.database.client import engine
+from app.services.predictor import predictor
+from app.api.routers import auth, teams, labels, tickets, collaboration, analytics
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Initialize ONNX runtime and Tokenizer
+    # Startup: Initialize ONNX runtime and Tokenizer into memory
     predictor._initialize()
     yield
-    # Safely dispose of the SQLAlchemy engine pool on shutdown
+    # Shutdown: Safely dispose of the SQLAlchemy engine pool
     await engine.dispose()
 
 app = FastAPI(
     title="Bug Triage API",
-    description="Stateful routing and inference service for Chromium bug report classification.",
-    version="2.0.0",
+    description="Enterprise issue tracking backend with multi-task CodeBERT routing.",
+    version="1.0.0",
     lifespan=lifespan
 )
 
-# Middleware
-app.add_middleware(TimingMiddleware)
+# --- Middleware ---
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"], # In production, restrict this to your React app's domain
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Exception Handlers
+# --- Exception Handlers ---
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
 app.add_exception_handler(Exception, global_exception_handler)
 
-# Routers
-app.include_router(inference.router)
+# --- Routers ---
+# Identity and Access
+app.include_router(auth.router)
+app.include_router(teams.router)
+app.include_router(labels.router)
 
+# Core Operations & Telemetry
+app.include_router(tickets.router)
+app.include_router(collaboration.router)
+app.include_router(analytics.router)
+
+# --- System Probes ---
 @app.get("/health", tags=["system"])
 async def health_check():
-    """Liveness probe for orchestration services."""
+    """Liveness probe for infrastructure monitoring."""
     return {
         "status": "healthy",
-        "model_loaded": predictor.session is not None
+        "database_pool": "initialized",
+        "model_loaded": getattr(predictor, 'session', None) is not None
     }
