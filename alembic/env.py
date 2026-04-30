@@ -1,6 +1,6 @@
 import asyncio
 from logging.config import fileConfig
-
+from app.core.config import settings
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
@@ -21,7 +21,7 @@ if config.config_file_name is not None:
 
 # 2. Set target metadata
 target_metadata = Base.metadata
-
+config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode."""
     url = config.get_main_option("sqlalchemy.url")

@@ -43,11 +43,18 @@ class User(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
-    hashed_password: Mapped[str] = mapped_column(String(255)) # Added for Phase 1 Auth
+    hashed_password: Mapped[str] = mapped_column(String(255))
     team_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("teams.id"))
 
-    team: Mapped[Optional["Team"]] = relationship(back_populates="users")
-    labels: Mapped[List["Label"]] = relationship(secondary="user_labels", back_populates="users")
+    team: Mapped[Optional["Team"]] = relationship(
+        back_populates="users",
+        lazy="selectin"
+    )
+    labels: Mapped[List["Label"]] = relationship(
+        secondary="user_labels",
+        back_populates="users",
+        lazy="selectin"
+    )
     comments: Mapped[List["Comment"]] = relationship(back_populates="author")
 
 class Ticket(Base):
@@ -56,7 +63,7 @@ class Ticket(Base):
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     title: Mapped[str] = mapped_column(String(255))
     description: Mapped[str] = mapped_column(Text)
-    reported_time: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    reported_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
     # ML Outputs

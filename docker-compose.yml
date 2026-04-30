@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: bugtriage_db
+    restart: always
+    environment:
+      POSTGRES_USER: triage_admin
+      POSTGRES_PASSWORD: securepassword123
+      POSTGRES_DB: bugtriage
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    deploy:
+      resources:
+        limits:
+          memory: 1G # Cap Postgres memory so the ML model has room to breathe
+
+  api:
+    build: .
+    container_name: bugtriage-api
+    restart: always
+    depends_on:
+      - db
+    ports:
+      - "8000:8000"
+    environment:
+      # Use the Docker service name 'db' as the host
+      DATABASE_URL: postgresql+asyncpg://triage_admin:securepassword123@db:5432/bugtriage
+      # Assuming you have JWT config set up:
+      SECRET_KEY: "generate-a-long-secure-random-string-here"
+      ALGORITHM: "HS256"
+
+volumes:
+  postgres_data:

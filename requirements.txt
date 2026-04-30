@@ -1,8 +1,22 @@
+# --- Core API ---
 fastapi
-uvicorn
-pydantic
-asyncpg
-scikit-learn
-pandas
-joblib
-locust
+uvicorn[standard]
+python-multipart      # Required for OAuth2 form data parsing
+
+# --- Database & Migrations ---
+asyncpg               # Async PostgreSQL driver
+sqlalchemy            # Database ORM
+alembic               # Database migrations
+pydantic-settings
+# --- Security & Auth (Phase 1 Additions) ---
+bcrypt
+python-jose[cryptography] # JWT creation and verification
+pydantic[email]       # Email validation for user registration
+
+# --- Deep Learning Inference ---
+transformers          # Hugging Face tokenizers
+onnxruntime           # Execution engine for the CodeBERT model
+numpy<2.0.0                 # Tensor manipulation for ONNX inputs/outputs
+
+# --- Testing ---
+locust                # Load testing
