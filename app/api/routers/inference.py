@@ -7,12 +7,11 @@ from app.database.model import Ticket, TicketAssignment
 from app.schemas.request import TicketCreate
 from app.schemas.response import TicketResponse
 from app.services.predictor import predictor
+from app.core.config import AUTO_ASSIGN_THRESHOLD
+
 
 router = APIRouter(prefix="/api/v1", tags=["tickets"])
 logger = logging.getLogger(__name__)
-
-# Configurable routing threshold
-AUTO_ASSIGN_THRESHOLD = 0.75
 
 
 async def dispatch_assignment_notification(ticket_id: uuid.UUID, label: str):
