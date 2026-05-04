@@ -10,8 +10,8 @@ from app.api.routers import auth, teams, labels, tickets, collaboration, analyti
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: Initialize ONNX runtime and Tokenizer into memory
-    predictor._initialize()
+    # Startup: initialize predictor asynchronously (loads ONNX + tokenizer)
+    await predictor.initialize()
     yield
     # Shutdown: Safely dispose of the SQLAlchemy engine pool
     await engine.dispose()
@@ -54,5 +54,5 @@ async def health_check():
     return {
         "status": "healthy",
         "database_pool": "initialized",
-        "model_loaded": getattr(predictor, 'session', None) is not None
+        "model_loaded": getattr(predictor, "_initialized", False)
     }
